@@ -30,10 +30,16 @@ ScreenManager:
 
         MDBoxLayout:
             size_hint_y: None
-            height: dp(50)
+            height: dp(45)
             padding: dp(10)
-            spacing: dp(20)
+            spacing: dp(15)
             md_bg_color: [0.36, 0.65, 0.82, 1]
+
+            MDRaisedButton:
+                text: "Home"
+                md_bg_color: [0.36, 0.65, 0.82, 1]
+                text_color: [1, 1, 1, 1]
+                on_release: app.show_home()
 
             MDRaisedButton:
                 text: "Employees"
@@ -56,11 +62,17 @@ ScreenManager:
         MDBoxLayout:
             id: realtime_clock_bar
             size_hint_y: None
-            height: dp(30)
+            height: dp(25)
             padding: dp(10), 0
             spacing: dp(10)
             md_bg_color: [0.83, 0.94, 0.96, 1]
 
+            Image:
+                source: "logo.jpg"  
+                size_hint: None, None
+                size: dp(35), dp(35)
+                allow_stretch: True
+                
             MDLabel:
                 id: clinic_title
                 text: "Good Samaritan Clinic"
@@ -82,7 +94,7 @@ ScreenManager:
         MDBoxLayout:
             id: clockin_status_bar
             size_hint_y: None
-            height: dp(30)
+            height: dp(25)
             padding: dp(10), 0
             spacing: dp(10)
             md_bg_color: [0.93, 0.97, 0.98, 1]
@@ -156,6 +168,10 @@ class VolunteerApp(MDApp):
         self.theme_cls.primary_palette = "LightBlue"
         self.conn = sqlite3.connect("volunteer_app.db")
         self.create_tables()
+        
+        # Load roles from the database
+        self.load_roles_from_db()
+        
         self.root = Builder.load_string(KV)
 
         self.realtime_label = self.root.get_screen('main').ids.realtime_clock
@@ -163,14 +179,19 @@ class VolunteerApp(MDApp):
         self.clockin_status_bar = self.root.get_screen('main').ids.clockin_status_bar
 
         Clock.schedule_interval(self.update_realtime_clock, 1)
+        self.show_home()
         return self.root
 
     def create_tables(self):
         c = self.conn.cursor()
+        
+        # Create tables if they don't exist
         c.execute('''CREATE TABLE IF NOT EXISTS employees (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        name TEXT NOT NULL,
-                        role TEXT NOT NULL
+                        first_name TEXT NOT NULL,
+                        last_name TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        price_per_hour REAL DEFAULT 0
                     )''')
         c.execute('''CREATE TABLE IF NOT EXISTS timesheets (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -179,6 +200,27 @@ class VolunteerApp(MDApp):
                         clock_out TEXT,
                         FOREIGN KEY(employee_id) REFERENCES employees(id)
                     )''')
+        
+        # Create a table for roles
+        c.execute('''CREATE TABLE IF NOT EXISTS roles (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL UNIQUE
+                    )''')
+        
+        # Check if price_per_hour column exists, if not, add it
+        c.execute("PRAGMA table_info(employees)")
+        columns = c.fetchall()
+        column_names = [column[1] for column in columns]
+        
+        if 'price_per_hour' not in column_names:
+            c.execute("ALTER TABLE employees ADD COLUMN price_per_hour REAL DEFAULT 0")
+        
+        # Insert default roles if roles table is empty
+        c.execute("SELECT COUNT(*) FROM roles")
+        if c.fetchone()[0] == 0:
+            for role in self.employee_roles:
+                c.execute("INSERT INTO roles (name) VALUES (?)", (role,))
+        
         self.conn.commit()
 
     def update_realtime_clock(self, *args):
@@ -187,8 +229,391 @@ class VolunteerApp(MDApp):
         self.update_timer()
 
     def show_home(self):
-        self.root.get_screen('main').ids.content_area.clear_widgets()
+        """Display a welcoming home screen with summary information and app description."""
+        # Create a scroll view to handle content when window is resized
+        scroll_view = ScrollView()
         
+        # Main content box that will be scrollable
+        content = MDBoxLayout(
+            orientation='vertical', 
+            spacing=10, 
+            padding=[20, 0, 20, 0],
+            size_hint_y=None
+        )
+        content.bind(minimum_height=content.setter('height'))
+        
+        # Welcome banner with clinic name and volunteer management - increased height
+        welcome_box = MDBoxLayout(
+            orientation='vertical',
+            size_hint_y=None,
+            height=dp(500),  
+            padding=[15, 30, 15, 15],  
+            md_bg_color=[0.36, 0.65, 0.82, 0.15], 
+            radius=[10, 10, 10, 10] 
+        )
+        
+        # Add spacer at the top to push content down
+        welcome_box.add_widget(MDBoxLayout(size_hint_y=None, height=dp(50)))
+        
+        welcome_title = MDLabel(
+            text="Welcome to Good Samaritan Clinic",
+            font_style="H4",  # Larger font style
+            theme_text_color="Custom",
+            text_color=[0.2, 0.2, 0.2, 1],
+            halign="center",
+            valign="middle",  # Center vertically
+            size_hint_y=None,
+            height=dp(100)  
+        )
+        
+        welcome_subtitle = MDLabel(
+            text="Volunteer Time Management System",
+            font_style="H5",  # Larger font style
+            theme_text_color="Custom",
+            text_color=[0.3, 0.3, 0.3, 1],
+            halign="center",
+            valign="middle",  # Center vertically
+            size_hint_y=None,
+            height=dp(80)  # Using your increased height but slightly reduced
+        )
+        
+        welcome_desc = MDLabel(
+            text="Track volunteer hours, manage staff, and generate reports",
+            font_style="H6",  # Larger font style
+            theme_text_color="Custom",
+            text_color=[0.4, 0.4, 0.4, 1],
+            halign="center",
+            valign="middle",  # Center vertically
+            size_hint_y=None,
+            height=dp(80)  # Using your increased height but slightly reduced
+        )
+        
+        # Add another spacer at the bottom to push content up
+        bottom_spacer = MDBoxLayout(size_hint_y=None, height=dp(100))
+        
+        welcome_box.add_widget(welcome_title)
+        welcome_box.add_widget(welcome_subtitle)
+        welcome_box.add_widget(welcome_desc)
+        welcome_box.add_widget(bottom_spacer)
+        content.add_widget(welcome_box)
+        
+        # Stats and quick access row
+        stats_container = MDGridLayout(
+            cols=2,  # 2 columns by default for larger screens
+            size_hint_y=None,
+            height=dp(350),  # Increased height to accommodate title boxes
+            spacing=15,
+            padding=[0, 10, 0, 0]
+        )
+        
+        # Set columns based on width
+        stats_container.bind(
+            width=lambda *x: setattr(
+                stats_container, 'cols', 1 if stats_container.width < dp(600) else 2
+            )
+        )
+        
+        # Left Column - Today's Activity
+        left_column = MDBoxLayout(
+            orientation='vertical',
+            size_hint_y=None,
+            height=dp(350),
+            spacing=5  # Reduced spacing between elements
+        )
+        
+        # Today's Activity title box
+        activity_title_box = MDBoxLayout(
+            orientation='vertical',
+            size_hint_y=None,
+            height=dp(50),
+            md_bg_color=[0.95, 0.95, 0.95, 1],
+            radius=[10, 10, 10, 10]
+        )
+        
+        activity_title = MDLabel(
+            text="Today's Activity",
+            font_style="H6",
+            theme_text_color="Custom",
+            text_color=[0.2, 0.2, 0.2, 1],
+            halign="center",
+            size_hint_y=None,
+            height=dp(50)
+        )
+        
+        activity_title_box.add_widget(activity_title)
+        left_column.add_widget(activity_title_box)
+        
+        # Stats box
+        stats_box = MDBoxLayout(
+            orientation='vertical',
+            size_hint_y=None,
+            height=dp(290),
+            padding=[15, 0, 15, 0],  # Removed vertical padding
+            md_bg_color=[0.95, 0.95, 0.95, 1],
+            radius=[10, 10, 10, 10]
+        )
+        
+        # Fetch today's stats from the database
+        c = self.conn.cursor()
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        # Get active volunteers
+        c.execute('''
+            SELECT COUNT(DISTINCT employee_id) FROM timesheets 
+            WHERE DATE(clock_in) = ? AND clock_out IS NULL
+        ''', (today,))
+        active_count = c.fetchone()[0]
+        
+        # Get completed shifts today
+        c.execute('''
+            SELECT COUNT(*) FROM timesheets 
+            WHERE DATE(clock_in) = ? AND clock_out IS NOT NULL
+        ''', (today,))
+        completed_count = c.fetchone()[0]
+        
+        # Get total volunteers who worked today
+        c.execute('''
+            SELECT COUNT(DISTINCT employee_id) FROM timesheets 
+            WHERE DATE(clock_in) = ?
+        ''', (today,))
+        total_volunteers = c.fetchone()[0]
+        
+        # NO top spacer in stats box
+        
+        # Display the stats with reduced heights and less spacing between them
+        active_label = MDLabel(
+            text=f"Active Volunteers: {active_count}",
+            font_style="H6",
+            theme_text_color="Custom",
+            text_color=[0.2, 0.7, 0.2, 1],
+            halign="center",
+            size_hint_y=None,
+            height=dp(70)  # Reduced from 80
+        )
+        completed_label = MDLabel(
+            text=f"Completed Shifts: {completed_count}",
+            font_style="H6",
+            theme_text_color="Custom",
+            text_color=[0.4, 0.4, 0.8, 1],
+            halign="center",
+            size_hint_y=None,
+            height=dp(70)  # Reduced from 80
+        )
+        total_label = MDLabel(
+            text=f"Total Volunteers Today: {total_volunteers}",
+            font_style="H6",
+            theme_text_color="Custom",
+            text_color=[0.3, 0.3, 0.3, 1],
+            halign="center",
+            size_hint_y=None,
+            height=dp(70)  # Reduced from 80
+        )
+        
+        # Add minimal spacing for vertical distribution
+        stats_box.add_widget(MDBoxLayout(size_hint_y=None, height=dp(15)))  # Small top space
+        stats_box.add_widget(active_label)
+        stats_box.add_widget(completed_label)
+        stats_box.add_widget(total_label)
+        stats_box.add_widget(MDBoxLayout(size_hint_y=None, height=dp(35)))  # Adjusted bottom space
+        
+        left_column.add_widget(stats_box)
+        
+        # Right section - Quick Access
+        right_column = MDBoxLayout(
+            orientation='vertical',
+            size_hint_y=None,
+            height=dp(350),
+            spacing=5  # Reduced spacing between elements
+        )
+        
+        # Quick Access title box
+        quick_access_title_box = MDBoxLayout(
+            orientation='vertical',
+            size_hint_y=None,
+            height=dp(50),
+            md_bg_color=[0.95, 0.95, 0.95, 1],
+            radius=[10, 10, 10, 10]
+        )
+        
+        quick_access_title = MDLabel(
+            text="Quick Access",
+            font_style="H6",
+            theme_text_color="Custom",
+            text_color=[0.2, 0.2, 0.2, 1],
+            halign="center",
+            size_hint_y=None,
+            height=dp(50)
+        )
+        
+        quick_access_title_box.add_widget(quick_access_title)
+        right_column.add_widget(quick_access_title_box)
+        
+        # Buttons container
+        buttons_box = MDBoxLayout(
+            orientation='vertical',
+            size_hint_y=None,
+            height=dp(290),
+            spacing=5,  # Reduced spacing
+            padding=[15, 0, 15, 0],  # Removed vertical padding
+            md_bg_color=[0.95, 0.95, 0.95, 1],
+            radius=[10, 10, 10, 10]
+        )
+        
+        # No top spacer - buttons will start at the top
+        buttons_box.add_widget(MDBoxLayout(size_hint_y=None, height=dp(15)))  # Minimal top space
+        
+        # Add employee button with fixed width
+        add_emp_btn = MDRaisedButton(
+            text="Add New Employee",
+            md_bg_color=[0.36, 0.65, 0.82, 1],
+            text_color=[1, 1, 1, 1],
+            size_hint=(None, None),
+            size=(dp(180), dp(45)),
+            pos_hint={"center_x": 0.5}  # Center horizontally
+        )
+        add_emp_btn.bind(on_release=lambda x: self.add_employee_dialog())
+        buttons_box.add_widget(add_emp_btn)
+        
+        # Add spacing between buttons
+        buttons_box.add_widget(MDBoxLayout(size_hint_y=None, height=dp(30)))
+        
+        # View active shifts button
+        view_active_btn = MDRaisedButton(
+            text="View Active Shifts",
+            md_bg_color=[0.2, 0.7, 0.3, 1],  # Green for active
+            text_color=[1, 1, 1, 1],
+            size_hint=(None, None),
+            size=(dp(180), dp(45)),
+            pos_hint={"center_x": 0.5}  # Center horizontally
+        )
+        view_active_btn.bind(on_release=lambda x: self.show_time_entries())
+        buttons_box.add_widget(view_active_btn)
+        
+        # Add spacing between buttons
+        buttons_box.add_widget(MDBoxLayout(size_hint_y=None, height=dp(30)))
+        
+        # Generate report button
+        report_btn = MDRaisedButton(
+            text="Generate Today's Report",
+            md_bg_color=[0.83, 0.94, 0.96, 1],  # Light blue
+            text_color=[0, 0, 0, 1],
+            size_hint=(None, None),
+            size=(dp(180), dp(45)),
+            pos_hint={"center_x": 0.5}  # Center horizontally
+        )
+        report_btn.bind(on_release=lambda x: self.generate_todays_report())
+        buttons_box.add_widget(report_btn)
+        
+        # Add bottom space to balance
+        buttons_box.add_widget(MDBoxLayout(size_hint_y=None, height=dp(45)))
+        
+        right_column.add_widget(buttons_box)
+        
+        # Add the two columns to the container
+        stats_container.add_widget(left_column)
+        stats_container.add_widget(right_column)
+        content.add_widget(stats_container)
+        
+        # Footer with app info
+        footer = MDLabel(
+            text="© 2025 Good Samaritan Clinic - Volunteer Management App",
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=[0.5, 0.5, 0.5, 1],
+            halign="center",
+            size_hint_y=None,
+            height=dp(30)
+        )
+        content.add_widget(footer)
+        content.add_widget(MDBoxLayout(size_hint_y=None, height=dp(20)))  # Bottom padding
+        
+        # Add content to scroll view
+        scroll_view.add_widget(content)
+        
+        # Clear and add to screen
+        self.root.get_screen('main').ids.content_area.clear_widgets()
+        self.root.get_screen('main').ids.content_area.add_widget(scroll_view)
+    
+    def add_new_role_dialog(self, *args):
+        # Temporarily dismiss the main dialog
+        self.dialog.dismiss()
+        
+        # Create new dialog for adding a role
+        role_layout = MDBoxLayout(orientation='vertical', spacing=15, padding=dp(20), size_hint_y=None, height=dp(120))
+        
+        role_label = MDLabel(
+            text="Enter new role name:",
+            halign="left",
+            theme_text_color="Custom",
+            text_color=[0, 0, 0, 1],
+            size_hint_y=None,
+            height=dp(20)
+        )
+        
+        self.new_role_input = MDTextField(
+            hint_text="New Role",
+            mode="rectangle"
+        )
+        
+        role_layout.add_widget(role_label)
+        role_layout.add_widget(self.new_role_input)
+        
+        self.role_dialog = MDDialog(
+            title="Add New Role",
+            type="custom",
+            content_cls=role_layout,
+            buttons=[
+                MDRaisedButton(
+                    text="Cancel", 
+                    on_release=lambda x: self.cancel_new_role(),
+                    md_bg_color=[0.36, 0.65, 0.82, 1], 
+                    text_color=[1, 1, 1, 1]
+                ),
+                MDRaisedButton(
+                    text="Add Role", 
+                    on_release=lambda x: self.confirm_new_role(),
+                    md_bg_color=[0.2, 0.7, 0.3, 1],  # Green
+                    text_color=[1, 1, 1, 1]
+                )
+            ]
+        )
+        self.role_dialog.open()
+
+    def cancel_new_role(self):
+        # Close the role dialog and reopen the main employee dialog
+        self.role_dialog.dismiss()
+        self.add_employee_dialog()
+
+    def confirm_new_role(self):
+        new_role = self.new_role_input.text.strip()
+        
+        if not new_role:
+            error_dialog = MDDialog(
+                title="Error",
+                text="Please enter a role name.",
+                buttons=[
+                    MDRaisedButton(text="OK", on_release=lambda x: error_dialog.dismiss())
+                ]
+            )
+            error_dialog.open()
+            return
+        
+        # Add the new role to the list if it's not already there
+        if new_role not in self.employee_roles:
+            self.employee_roles.append(new_role)
+            # Sort roles alphabetically
+            self.employee_roles.sort()
+        
+        # Select this role for the employee
+        self.role_selected = new_role
+        
+        # Close the role dialog
+        self.role_dialog.dismiss()
+        
+        # Reopen the employee dialog with the new role selected
+        self.add_employee_dialog()
+        self.role_menu_button.text = new_role
+    
     def verify_boss_pin_for_add(self, *args):
         self.prompt_pin(lambda: self.add_employee_dialog())
 
@@ -301,6 +726,50 @@ class VolunteerApp(MDApp):
     def filter_employees(self, *args):
         self.load_employees(filter_text=self.search_input.text.strip().lower())
         
+    def select_employee_action(self, action, emp_id, name):
+        """Handle employee actions from the menu."""
+        if action == "remove":
+            # Prompt for PIN before confirming deletion
+            self.prompt_pin(lambda: self.show_remove_confirmation(emp_id, name))
+            
+            # Dismiss the employee menu if it's open
+            if hasattr(self, 'emp_menu'):
+                self.emp_menu.dismiss()
+    
+    def show_remove_confirmation(self, emp_id, name):
+        """Show confirmation dialog after PIN verification."""
+        confirm_dialog = MDDialog(
+            title="Confirm Removal",
+            text=f"Are you sure you want to remove {name}?",
+            buttons=[
+                MDRaisedButton(
+                    text="Cancel", 
+                    md_bg_color=[0.36, 0.65, 0.82, 1],
+                    text_color=[1, 1, 1, 1],
+                    on_release=lambda x: confirm_dialog.dismiss()
+                ),
+                MDRaisedButton(
+                    text="Remove", 
+                    md_bg_color=[0.8, 0.2, 0.2, 1],  # Red color for delete
+                    text_color=[1, 1, 1, 1],
+                    on_release=lambda x: self.confirm_remove_employee(confirm_dialog, emp_id)
+                )
+            ]
+        )
+        confirm_dialog.open()
+
+    def confirm_remove_employee(self, dialog, emp_id):
+        """Confirm and execute employee removal."""
+        dialog.dismiss()
+        self.remove_employee(emp_id) 
+    
+    def load_roles_from_db(self):
+        """Load roles from the database"""
+        c = self.conn.cursor()
+        c.execute("SELECT name FROM roles ORDER BY name")
+        roles = c.fetchall()
+        self.employee_roles = [role[0] for role in roles]
+          
     def load_employees(self, filter_text=""):
         self.employee_list_widget.clear_widgets()
         c = self.conn.cursor()
@@ -312,22 +781,26 @@ class VolunteerApp(MDApp):
         ''')
         active_employees = {row[0] for row in c.fetchall()}
         
-        # Fetch all employees
-        c.execute("SELECT id, name, role FROM employees ORDER BY role, name")
+        # Fetch all employees with separated first and last names
+        c.execute("SELECT id, first_name, last_name, role FROM employees ORDER BY role, last_name, first_name")
         employees = c.fetchall()
         
         # Create a dictionary to group employees by role
         role_groups = {}
         
         # Filter and group employees
-        for emp_id, name, role in employees:
-            if filter_text and filter_text not in name.lower():
+        for emp_id, first_name, last_name, role in employees:
+            # Combine names for display
+            full_name = f"{first_name} {last_name}".strip()
+            
+            # Apply filter on the combined name
+            if filter_text and filter_text not in full_name.lower():
                 continue
-                
+                    
             if role not in role_groups:
                 role_groups[role] = []
             
-            role_groups[role].append((emp_id, name))
+            role_groups[role].append((emp_id, full_name))
         
         # Display employees grouped by role
         for role in self.employee_roles:
@@ -381,6 +854,11 @@ class VolunteerApp(MDApp):
                         padding=[15, 5, 15, 5],
                         md_bg_color=[0.95, 0.95, 0.95, 1] if i % 2 == 0 else [1, 1, 1, 1]  # Alternating colors
                     )
+                    
+                    # Change background for active employees
+                    is_clocked_in = emp_id in active_employees
+                    if is_clocked_in:
+                        employee_card.md_bg_color = [0.9, 1, 0.9, 1]  # Light green background
                     
                     # Left side: Employee initials circle
                     initials = "".join([n[0].upper() for n in name.split() if n])
@@ -445,19 +923,27 @@ class VolunteerApp(MDApp):
                     )
                     
                     # Check if employee is already clocked in
-                    is_clocked_in = emp_id in active_employees
-                    
                     if is_clocked_in:
-                        # Show "Active" status instead of clock-in button
-                        status_button = MDRaisedButton(
-                            text="Active",
-                            md_bg_color=[0.1, 0.6, 0.1, 1],  # Darker green
-                            text_color=[1, 1, 1, 1],
-                            size_hint=(None, None),
-                            size=(dp(80), dp(40)),
-                            disabled=True
-                        )
-                        action_box.add_widget(status_button)
+                        # Get the timesheet entry id for this employee to clock them out
+                        c.execute('''
+                            SELECT id FROM timesheets 
+                            WHERE employee_id = ? AND clock_out IS NULL
+                            ORDER BY clock_in DESC LIMIT 1
+                        ''', (emp_id,))
+                        timesheet_entry = c.fetchone()
+                        
+                        if timesheet_entry:
+                            entry_id = timesheet_entry[0]
+                            # Show Clock Out button instead of disabled Active status
+                            clock_out_btn = MDRaisedButton(
+                                text="Clock Out",
+                                md_bg_color=[0.1, 0.6, 0.1, 1],  # Darker green
+                                text_color=[1, 1, 1, 1],
+                                size_hint=(None, None),
+                                size=(dp(80), dp(40)),
+                                on_release=lambda x, eid=emp_id, tid=entry_id: self.clock_out_and_refresh(eid, tid)
+                            )
+                            action_box.add_widget(clock_out_btn)
                     else:
                         # Show regular clock-in button
                         clock_in_btn = MDRaisedButton(
@@ -510,22 +996,131 @@ class VolunteerApp(MDApp):
 
     def add_employee_dialog(self, *args):
         layout = MDBoxLayout(orientation='vertical', spacing=5, padding=dp(20), size_hint_y=None)
-        layout.height = self.root.height * 0.3
-
-        name_label = MDLabel(text="Enter employee name:", halign="left", theme_text_color="Custom", text_color=[0, 0, 0, 1], size_hint_y=None,  height=dp(20))
-        self.name_input = MDTextField(hint_text="Full Name", mode="rectangle")
+        layout.height = self.root.height * 0.55  # Increased height to accommodate all fields
+        
+        # First Name field
+        first_name_label = MDLabel(
+            text="First Name:*", 
+            halign="left", 
+            theme_text_color="Custom", 
+            text_color=[0, 0, 0, 1], 
+            size_hint_y=None, 
+            height=dp(20)
+        )
+        self.first_name_input = MDTextField(hint_text="First Name", mode="rectangle")
+        
+        # Last Name field
+        last_name_label = MDLabel(
+            text="Last Name:*", 
+            halign="left", 
+            theme_text_color="Custom", 
+            text_color=[0, 0, 0, 1], 
+            size_hint_y=None, 
+            height=dp(20)
+        )
+        self.last_name_input = MDTextField(hint_text="Last Name", mode="rectangle")
+        
+        # Price/hour field
+        price_label = MDLabel(
+            text="Price per hour ($):*", 
+            halign="left", 
+            theme_text_color="Custom", 
+            text_color=[0, 0, 0, 1], 
+            size_hint_y=None, 
+            height=dp(20)
+        )
+        self.price_input = MDTextField(hint_text="0.00", mode="rectangle", input_filter="float")
+        
+        # Role section with existing roles dropdown
+        role_label = MDLabel(
+            text="Role:*", 
+            halign="left", 
+            theme_text_color="Custom", 
+            text_color=[0, 0, 0, 1], 
+            size_hint_y=None, 
+            height=dp(20)
+        )
+        
+        # Create role selection box
+        self.role_selected = None
+        role_dropdown_box = MDBoxLayout(
+            orientation='vertical',
+            size_hint_y=None,
+            height=dp(50),
+            spacing=5
+        )
+        
         self.role_menu_button = MDRaisedButton(
             text="Select Role", 
             on_release=self.open_role_menu,
             md_bg_color=[0.36, 0.65, 0.82, 1],  
-            text_color=[1, 1, 1, 1]
+            text_color=[1, 1, 1, 1],
+            size_hint_x=1
         )
-
-        layout.add_widget(name_label)
-        layout.add_widget(self.name_input)
-        layout.add_widget(self.role_menu_button)
-
+        role_dropdown_box.add_widget(self.role_menu_button)
+        
+        # New role section
+        new_role_label = MDLabel(
+            text="Or add a new role:", 
+            halign="left", 
+            theme_text_color="Custom", 
+            text_color=[0, 0, 0, 1], 
+            size_hint_y=None, 
+            height=dp(20)
+        )
+        
+        new_role_box = MDBoxLayout(
+            orientation='horizontal',
+            size_hint_y=None,
+            height=dp(50),
+            spacing=10
+        )
+        
+        self.new_role_input = MDTextField(
+            hint_text="New Role Name",
+            mode="rectangle",
+            size_hint_x=0.7
+        )
+        
+        add_role_btn = MDRaisedButton(
+            text="Add", 
+            on_release=lambda x: self.add_new_role_inline(),
+            md_bg_color=[0.36, 0.65, 0.82, 1],  
+            text_color=[1, 1, 1, 1],
+            size_hint_x=0.3
+        )
+        
+        new_role_box.add_widget(self.new_role_input)
+        new_role_box.add_widget(add_role_btn)
+        
+        # Required fields note
+        required_note = MDLabel(
+            text="* All fields are required", 
+            halign="left", 
+            theme_text_color="Custom", 
+            text_color=[0.8, 0.2, 0.2, 1],  # Red color for emphasis
+            font_style="Caption",
+            size_hint_y=None, 
+            height=dp(20)
+        )
+        
+        # Add all fields to layout
+        layout.add_widget(first_name_label)
+        layout.add_widget(self.first_name_input)
+        layout.add_widget(last_name_label)
+        layout.add_widget(self.last_name_input)
+        layout.add_widget(price_label)
+        layout.add_widget(self.price_input)
+        layout.add_widget(role_label)
+        layout.add_widget(role_dropdown_box)
+        layout.add_widget(MDBoxLayout(size_hint_y=None, height=dp(5)))  # Small spacer
+        layout.add_widget(new_role_label)
+        layout.add_widget(new_role_box)
+        layout.add_widget(MDBoxLayout(size_hint_y=None, height=dp(10)))  # Spacer
+        layout.add_widget(required_note)
+        
         self.dialog = MDDialog(
+            title="Add New Employee",
             type="custom",
             content_cls=layout,
             buttons=[
@@ -555,19 +1150,130 @@ class VolunteerApp(MDApp):
         self.role_menu_button.text = role
         self.menu.dismiss()
 
+    
+    def add_new_role_inline(self):
+        """Add a new role directly from the employee dialog"""
+        new_role = self.new_role_input.text.strip()
+        
+        if not new_role:
+            # Show error in the text field
+            self.new_role_input.error = True
+            return
+        
+        # Reset error state if any
+        self.new_role_input.error = False
+        
+        # Add the new role to the list if it's not already there
+        if new_role not in self.employee_roles:
+            # Add to the list in memory
+            self.employee_roles.append(new_role)
+            # Sort roles alphabetically
+            self.employee_roles.sort()
+            
+            # Add to the database
+            c = self.conn.cursor()
+            try:
+                c.execute("INSERT INTO roles (name) VALUES (?)", (new_role,))
+                self.conn.commit()
+            except sqlite3.IntegrityError:
+                # Role already exists in database
+                pass
+        
+        # Select this role for the employee
+        self.role_selected = new_role
+        
+        # Update the role button text
+        self.role_menu_button.text = new_role
+        
+        # Clear the new role input
+        self.new_role_input.text = ""
+    
     def save_employee(self):
-        name = self.name_input.text.strip()
-        role = self.role_selected
-        if not name or not role:
+        first_name = self.first_name_input.text.strip()
+        last_name = self.last_name_input.text.strip()
+        price_text = self.price_input.text.strip()
+        
+        # Validate all required fields
+        missing_fields = []
+        
+        if not first_name:
+            missing_fields.append("First Name")
+            self.first_name_input.error = True
+        else:
+            self.first_name_input.error = False
+        
+        if not last_name:
+            missing_fields.append("Last Name")
+            self.last_name_input.error = True
+        else:
+            self.last_name_input.error = False
+        
+        if not price_text:
+            missing_fields.append("Price per hour")
+            self.price_input.error = True
+        else:
+            self.price_input.error = False
+        
+        # Check if role is selected
+        if not hasattr(self, 'role_selected') or self.role_selected is None:
+            missing_fields.append("Role")
+            # Can't set error on button, but add to missing fields list
+        
+        # If any fields are missing, show error and return
+        if missing_fields:
+            error_message = "Please fill in the following required fields:\n• " + "\n• ".join(missing_fields)
             alert = MDDialog(
-                title="Missing Info",
-                text="Please enter a name and select a role.",
-                buttons=[MDRaisedButton(text="OK", on_release=lambda x: alert.dismiss())]
+                title="Missing Information",
+                text=error_message,
+                buttons=[MDRaisedButton(
+                    text="OK", 
+                    on_release=lambda x: alert.dismiss(),
+                    md_bg_color=[0.36, 0.65, 0.82, 1], 
+                    text_color=[1, 1, 1, 1]
+                )]
             )
             alert.open()
             return
+        
+        # Validate price as a number
+        try:
+            price_per_hour = float(price_text)
+            if price_per_hour < 0:
+                self.price_input.error = True
+                alert = MDDialog(
+                    title="Invalid Price",
+                    text="Price per hour cannot be negative.",
+                    buttons=[MDRaisedButton(
+                        text="OK", 
+                        on_release=lambda x: alert.dismiss(),
+                        md_bg_color=[0.36, 0.65, 0.82, 1], 
+                        text_color=[1, 1, 1, 1]
+                    )]
+                )
+                alert.open()
+                return
+        except ValueError:
+            self.price_input.error = True
+            alert = MDDialog(
+                title="Invalid Price",
+                text="Price per hour must be a valid number.",
+                buttons=[MDRaisedButton(
+                    text="OK", 
+                    on_release=lambda x: alert.dismiss(),
+                    md_bg_color=[0.36, 0.65, 0.82, 1], 
+                    text_color=[1, 1, 1, 1]
+                )]
+            )
+            alert.open()
+            return
+        
+        # All validation passed, save the employee
+        role = self.role_selected
         c = self.conn.cursor()
-        c.execute("INSERT INTO employees (name, role) VALUES (?, ?)", (name, role))
+        c.execute(
+            "INSERT INTO employees (first_name, last_name, role, price_per_hour) VALUES (?, ?, ?, ?)",
+            (first_name, last_name, role, price_per_hour)
+        )
         self.conn.commit()
         self.dialog.dismiss()
         self.show_employees()
@@ -603,8 +1309,9 @@ class VolunteerApp(MDApp):
         c = self.conn.cursor()
         
         # Get employee name for confirmation
-        c.execute("SELECT name FROM employees WHERE id = ?", (employee_id,))
-        employee_name = c.fetchone()[0]
+        c.execute("SELECT first_name, last_name FROM employees WHERE id = ?", (employee_id,))
+        first_name, last_name = c.fetchone()
+        employee_name = f"{first_name} {last_name}".strip()
         
         # Update the time entry
         c.execute('''UPDATE timesheets SET clock_out=? WHERE id=? AND clock_out IS NULL''', 
@@ -636,7 +1343,44 @@ class VolunteerApp(MDApp):
         """Clock in an employee and refresh the employee list to update buttons"""
         self.clock_in(emp_id, name)
         self.show_employees() 
+     
+    def clock_out_and_refresh(self, employee_id, entry_id):
+        """Clock out an employee and refresh the employee list to update buttons"""
+        # First clock out the employee
+        clock_out_time = datetime.now().isoformat()
+        c = self.conn.cursor()
         
+        # Get employee name for confirmation
+        c.execute("SELECT first_name, last_name FROM employees WHERE id = ?", (employee_id,))
+        first_name, last_name = c.fetchone()
+        employee_name = f"{first_name} {last_name}".strip()
+        
+        # Update the time entry
+        c.execute('''UPDATE timesheets SET clock_out=? WHERE id=? AND clock_out IS NULL''', 
+                (clock_out_time, entry_id))
+        self.conn.commit()
+        
+        # Show confirmation dialog
+        clock_out_dialog = MDDialog(
+            title="Clock Out Successful",
+            text=f"{employee_name} has been clocked out at {datetime.now().strftime('%I:%M %p')}",
+            buttons=[
+                MDRaisedButton(
+                    text="OK", 
+                    md_bg_color=[0.36, 0.65, 0.82, 1],
+                    text_color=[1, 1, 1, 1],
+                    on_release=lambda x: self.on_employee_clock_out_dialog_close(clock_out_dialog)
+                )
+            ]
+        )
+        clock_out_dialog.open()
+
+    def on_employee_clock_out_dialog_close(self, dialog):
+        """Handle dialog close and refresh employees"""
+        dialog.dismiss()
+        # Refresh the employee list to update the buttons
+        self.show_employees()
+       
     def update_timer(self, *args):
         if self.clock_in_time:
             now = datetime.now()
@@ -664,7 +1408,7 @@ class VolunteerApp(MDApp):
         # Get time entries from database
         c = self.conn.cursor()
         c.execute('''
-            SELECT e.name, e.role, t.clock_in, t.clock_out, t.id, e.id 
+            SELECT e.first_name, e.last_name, e.role, t.clock_in, t.clock_out, t.id, e.id 
             FROM timesheets t 
             JOIN employees e ON e.id = t.employee_id 
             ORDER BY t.clock_in DESC
@@ -683,7 +1427,10 @@ class VolunteerApp(MDApp):
         
         # Group entries by date
         current_date = None
-        for name, role, clock_in, clock_out, entry_id, employee_id in rows:
+        for first_name, last_name, role, clock_in, clock_out, entry_id, employee_id in rows:
+            # Combine first and last name
+            name = f"{first_name} {last_name}".strip()
+            
             if clock_in:
                 entry_date = datetime.fromisoformat(clock_in).strftime('%A, %B %d, %Y')
                 
@@ -719,12 +1466,13 @@ class VolunteerApp(MDApp):
                     duration_str = f"{hours}h {minutes}m"
                     status = f"Completed shift ({duration_str})"
                     bg_color = [0.95, 0.95, 0.95, 1]  # Light gray for completed shifts
-                    entry_height = dp(70)  # Standard height for completed entries
                 else:
                     clock_out_time = "Still clocked in"
                     status = "Currently active"
                     bg_color = [0.95, 1, 0.95, 1]  # Light green for active shifts
-                    entry_height = dp(100)  # Increased height for active entries with button
+                
+                # Use the same height for all entries
+                entry_height = dp(70)
                 
                 # Create entry card with fixed height
                 entry_box = BorderedBox(
@@ -797,29 +1545,7 @@ class VolunteerApp(MDApp):
                 # Add main content to the entry box
                 entry_box.add_widget(content_box)
                 
-                # Add clock-out button for active entries in a separate container
-                if not clock_out:
-                    button_box = MDBoxLayout(
-                        orientation="horizontal", 
-                        size_hint_y=None,
-                        height=dp(30),
-                        padding=[0, 5, 0, 0]
-                    )
-                    
-                    # Push button to the right
-                    button_box.add_widget(MDBoxLayout(size_hint_x=0.7))
-                    
-                    clock_out_btn = MDRaisedButton(
-                        text="Clock Out",
-                        md_bg_color=[0.36, 0.65, 0.82, 1],
-                        text_color=[1, 1, 1, 1],
-                        size_hint=(None, None),
-                        size=(dp(120), dp(30)),
-                        on_release=lambda x, eid=employee_id, tid=entry_id: self.clock_out_specific(eid, tid)
-                    )
-                    button_box.add_widget(clock_out_btn)
-                    entry_box.add_widget(button_box)
-                
+                # Add the entry to the list
                 entries_box.add_widget(entry_box)
                 
                 # Add spacing between entries
@@ -1000,7 +1726,7 @@ class VolunteerApp(MDApp):
             md_bg_color=[0.36, 0.65, 0.82, 1],
             text_color=[1, 1, 1, 1],
             size_hint_x=0.3,  # Reduced to make room for role field
-            on_release=lambda x: self.show_employee_menu()
+            on_release=lambda x: self.show_employee_menu_for_reports()
         )
         filter_row.add_widget(self.employee_spinner_btn)
         
@@ -1124,7 +1850,43 @@ class VolunteerApp(MDApp):
             width_mult=3
         )
         self.emp_menu.open()
-
+        
+    def show_employee_menu_for_reports(self):
+        """Show dropdown menu of employees for reporting."""
+        # First get all employees
+        c = self.conn.cursor()
+        c.execute("SELECT id, first_name, last_name FROM employees ORDER BY last_name, first_name")
+        employees = c.fetchall()
+        
+        # Create menu items list with "All Employees" option first
+        menu_items = [
+            {
+                "text": "All Employees",
+                "viewclass": "OneLineListItem",
+                "on_release": lambda: self.select_employee_for_report(None, "All Employees")
+            }
+        ]
+        
+        # Add each employee as an option
+        for emp_id, first_name, last_name in employees:
+            # Combine names for display
+            full_name = f"{first_name} {last_name}".strip()
+            menu_items.append(
+                {
+                    "text": full_name,
+                    "viewclass": "OneLineListItem",
+                    "on_release": lambda eid=emp_id, n=full_name: self.select_employee_for_report(eid, n)
+                }
+            )
+        
+        # Create and open the dropdown menu
+        self.employee_menu = MDDropdownMenu(
+            caller=self.employee_spinner_btn,
+            items=menu_items,
+            width_mult=4
+        )
+        self.employee_menu.open()
+    
     def select_employee_for_report(self, emp_id, name):
         self.selected_employee_id = emp_id
         self.employee_spinner_btn.text = name
@@ -1179,9 +1941,9 @@ class VolunteerApp(MDApp):
                 self.show_error_message("Please enter valid dates in YYYY-MM-DD format")
                 return
         
-        # Build query
+        # Build query using first_name and last_name instead of name
         query = '''
-            SELECT e.name, e.role, t.clock_in, t.clock_out, t.id 
+            SELECT e.first_name, e.last_name, e.role, t.clock_in, t.clock_out, t.id, e.id 
             FROM timesheets t 
             JOIN employees e ON e.id = t.employee_id 
             WHERE 1=1
@@ -1250,7 +2012,10 @@ class VolunteerApp(MDApp):
         self.report_results.add_widget(header_box)
         
         # Add rows
-        for i, (name, role, clock_in, clock_out, _) in enumerate(rows):
+        for i, (first_name, last_name, role, clock_in, clock_out, _, employee_id) in enumerate(rows):
+            # Combine first and last name
+            name = f"{first_name} {last_name}".strip()
+            
             # Format dates
             if clock_in:
                 ci_dt = datetime.fromisoformat(clock_in)
@@ -1297,6 +2062,19 @@ class VolunteerApp(MDApp):
             
             self.report_results.add_widget(row_box)
 
+    def generate_todays_report(self):
+        """Preset the reports page with today's date and generate report."""
+        # First navigate to reports page
+        self.show_reports()
+        
+        # Set today's date
+        today = datetime.now().strftime("%Y-%m-%d")
+        self.date_from.text = today
+        self.date_to.text = today
+        
+        # Generate the report
+        self.generate_report()
+
     def add_report_summary(self, rows):
         # Calculate summary statistics
         total_shifts = len(rows)
@@ -1304,41 +2082,29 @@ class VolunteerApp(MDApp):
         completed_shifts = 0
         
         # Process data for summary
-        employee_hours = {}
         role_hours = {}
-        date_hours = {}
         
-        for name, role, clock_in, clock_out, _ in rows:
+        for first_name, last_name, role, clock_in, clock_out, _, employee_id in rows:
+            # Combine names for display
+            name = f"{first_name} {last_name}".strip()
+            
             if clock_in and clock_out:
                 duration = datetime.fromisoformat(clock_out) - datetime.fromisoformat(clock_in)
                 hours = duration.total_seconds() / 3600
                 total_hours += hours
                 completed_shifts += 1
-                
-                # By employee
-                if name in employee_hours:
-                    employee_hours[name] += hours
-                else:
-                    employee_hours[name] = hours
                     
                 # By role
                 if role in role_hours:
                     role_hours[role] += hours
                 else:
                     role_hours[role] = hours
-                    
-                # By date
-                date_str = datetime.fromisoformat(clock_in).strftime('%Y-%m-%d')
-                if date_str in date_hours:
-                    date_hours[date_str] += hours
-                else:
-                    date_hours[date_str] = hours
         
         # Create summary box
         summary_box = BorderedBox(
             orientation="vertical",
             size_hint_y=None,
-            height=dp(150),
+            height=dp(120),  # Reduced height since we removed a section
             bg_color=[0.97, 0.97, 0.97, 1],
             padding=[15, 10, 15, 10],
             spacing=5
@@ -1380,29 +2146,6 @@ class VolunteerApp(MDApp):
         stats_box.add_widget(completed_shifts_label)
         stats_box.add_widget(total_hours_label)
         summary_box.add_widget(stats_box)
-        
-        # Top contributors
-        if employee_hours:
-            top_employees = sorted(employee_hours.items(), key=lambda x: x[1], reverse=True)[:3]
-            top_emp_box = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(30))
-            
-            top_emp_title = MDLabel(
-                text="Top Contributors:",
-                theme_text_color="Custom",
-                text_color=[0.2, 0.2, 0.2, 1],
-                bold=True,
-                size_hint_x=0.3
-            )
-            top_emp_box.add_widget(top_emp_title)
-            
-            top_emp_data = MDLabel(
-                text=", ".join([f"{name} ({hours:.1f}h)" for name, hours in top_employees]),
-                theme_text_color="Custom",
-                text_color=[0.2, 0.2, 0.2, 1],
-                size_hint_x=0.7
-            )
-            top_emp_box.add_widget(top_emp_data)
-            summary_box.add_widget(top_emp_box)
         
         # Hours by role
         if role_hours:
@@ -1481,9 +2224,9 @@ class VolunteerApp(MDApp):
         from_date = self.date_from.text.strip()
         to_date = self.date_to.text.strip()
         
-        # Build query
+        # Build query - now updated to include first_name and last_name
         query = '''
-            SELECT e.name, e.role, t.clock_in, t.clock_out 
+            SELECT e.first_name, e.last_name, e.role, t.clock_in, t.clock_out, e.id, e.price_per_hour
             FROM timesheets t 
             JOIN employees e ON e.id = t.employee_id 
             WHERE 1=1
@@ -1517,33 +2260,61 @@ class VolunteerApp(MDApp):
             self.show_error_message("No data to export")
             return
         
+        # Calculate summary statistics
+        total_shifts = len(rows)
+        total_hours = 0
+        completed_shifts = 0
+        total_earnings = 0
+        
+        # Process data for summary
+        role_hours = {}
+        role_earnings = {}
+        
+        # Make sure to unpack the correct number of columns
+        for first_name, last_name, role, clock_in, clock_out, employee_id, price_per_hour in rows:
+            # Combine names for display
+            name = f"{first_name} {last_name}".strip()
+            
+            if clock_in and clock_out:
+                duration = datetime.fromisoformat(clock_out) - datetime.fromisoformat(clock_in)
+                hours = duration.total_seconds() / 3600
+                total_hours += hours
+                completed_shifts += 1
+                
+                # Calculate earnings for this shift
+                earnings = hours * price_per_hour
+                total_earnings += earnings
+                    
+                # By role
+                if role in role_hours:
+                    role_hours[role] += hours
+                    role_earnings[role] = role_earnings.get(role, 0) + earnings
+                else:
+                    role_hours[role] = hours
+                    role_earnings[role] = earnings
+        
         try:
             # Generate a filename with timestamp
             import os
-            from datetime import datetime
             import csv
             
             # Create a desktop path for the CSV file
             home_dir = os.path.expanduser("~")
             desktop_dir = os.path.join(home_dir, "Desktop")
-            date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            date_str = datetime.now().strftime("%Y%m%d")
             
-            # Create filename with filters included
-            filename_parts = ["volunteer_report"]
-            
-            if from_date:
-                filename_parts.append(f"from_{from_date}")
-            if to_date:
-                filename_parts.append(f"to_{to_date}")
+            # Create a more straightforward filename based on your criteria
             if hasattr(self, 'selected_employee_id') and self.selected_employee_id is not None:
+                # For a single employee report
                 employee_name = self.employee_spinner_btn.text.replace(" ", "_")
-                filename_parts.append(employee_name)
-            if hasattr(self, 'selected_role') and self.selected_role is not None:
-                role_name = self.role_spinner_btn.text.replace(" ", "_")
-                filename_parts.append(role_name)
-                
-            filename_parts.append(date_str)
-            filename = "_".join(filename_parts) + ".csv"
+                filename = f"{employee_name}'s_Report_{date_str}.csv"
+            elif hasattr(self, 'selected_role') and self.selected_role is not None:
+                # For a specific role report
+                role_name = self.selected_role.replace(" ", "_")
+                filename = f"{role_name}_Role_Report_{date_str}.csv"
+            else:
+                # For all employees
+                filename = f"All_Employees_Report_{date_str}.csv"
             
             # Full path for the file
             file_path = os.path.join(desktop_dir, filename)
@@ -1552,11 +2323,36 @@ class VolunteerApp(MDApp):
             with open(file_path, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)
                 
-                # Write header
-                writer.writerow(['Name', 'Role', 'Clock In', 'Clock Out', 'Duration (Hours)'])
+                # Write summary statistics first
+                writer.writerow(['Summary Statistics'])
+                writer.writerow(['Total Shifts', str(total_shifts)])
+                writer.writerow(['Completed Shifts', str(completed_shifts)])
+                writer.writerow(['Total Hours', f"{total_hours:.2f}"])
+                writer.writerow(['Total Earnings', f"${total_earnings:.2f}"])
+                
+                # Add hours and earnings by role
+                if role_hours:
+                    writer.writerow([''])
+                    writer.writerow(['Hours and Earnings by Role:'])
+                    for role in sorted(role_hours.keys()):
+                        writer.writerow([
+                            role, 
+                            f"{role_hours[role]:.2f}h", 
+                            f"${role_earnings.get(role, 0):.2f}"
+                        ])
+                
+                # Add a separator
+                writer.writerow([''])
+                writer.writerow([''])  # Extra blank line for separation
+                
+                # Write header for detailed data
+                writer.writerow(['Name', 'Role', 'Clock In', 'Clock Out', 'Duration (Hours)', 'Rate ($/hr)', 'Earnings ($)'])
                 
                 # Write data
-                for name, role, clock_in, clock_out in rows:
+                for first_name, last_name, role, clock_in, clock_out, employee_id, price_per_hour in rows:
+                    # Combine names for display
+                    name = f"{first_name} {last_name}".strip()
+                    
                     # Format times
                     if clock_in:
                         clock_in_fmt = datetime.fromisoformat(clock_in).strftime('%Y-%m-%d %H:%M:%S')
@@ -1569,11 +2365,24 @@ class VolunteerApp(MDApp):
                         duration = (datetime.fromisoformat(clock_out) - 
                                 datetime.fromisoformat(clock_in)).total_seconds() / 3600
                         duration_fmt = f"{duration:.2f}"
+                        
+                        # Calculate earnings for this shift
+                        earnings = duration * price_per_hour
+                        earnings_fmt = f"{earnings:.2f}"
                     else:
                         clock_out_fmt = ""
                         duration_fmt = ""
+                        earnings_fmt = ""
                     
-                    writer.writerow([name, role, clock_in_fmt, clock_out_fmt, duration_fmt])
+                    writer.writerow([
+                        name, 
+                        role, 
+                        clock_in_fmt, 
+                        clock_out_fmt, 
+                        duration_fmt, 
+                        f"{price_per_hour:.2f}", 
+                        earnings_fmt
+                    ])
             
             # Show success message
             success_dialog = MDDialog(
