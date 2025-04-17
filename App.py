@@ -2294,33 +2294,45 @@ class VolunteerApp(MDApp):
                     role_earnings[role] = earnings
         
         try:
-            # Generate a filename with timestamp
             import os
             import csv
+            import platform
             
-            # Create a desktop path for the CSV file
-            home_dir = os.path.expanduser("~")
-            desktop_dir = os.path.join(home_dir, "Desktop")
+            # Create simpler filename
             date_str = datetime.now().strftime("%Y%m%d")
             
             # Create a more straightforward filename based on your criteria
             if hasattr(self, 'selected_employee_id') and self.selected_employee_id is not None:
                 # For a single employee report
                 employee_name = self.employee_spinner_btn.text.replace(" ", "_")
-                # Remove apostrophes which can cause file system issues
+                # Remove any special characters that could cause issues
+                employee_name = ''.join(c for c in employee_name if c.isalnum() or c == '_')
                 filename = f"{employee_name}_Report_{date_str}.csv"
             elif hasattr(self, 'selected_role') and self.selected_role is not None:
                 # For a specific role report
                 role_name = self.selected_role.replace(" ", "_")
+                # Remove any special characters
+                role_name = ''.join(c for c in role_name if c.isalnum() or c == '_')
                 filename = f"{role_name}_Role_Report_{date_str}.csv"
             else:
                 # For all employees
                 filename = f"All_Employees_Report_{date_str}.csv"
+                
+            # Get appropriate path based on operating system
+            if platform.system() == "Windows":
+                # On Windows, use the Documents folder instead of Desktop to avoid permission issues
+                documents_dir = os.path.join(os.path.expanduser("~"), "Documents")
+                if not os.path.exists(documents_dir):
+                    # Fall back to the current directory if Documents doesn't exist
+                    documents_dir = os.getcwd()
+                file_path = os.path.join(documents_dir, filename)
+            else:
+                # On Mac/Linux, use the Desktop folder
+                desktop_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+                file_path = os.path.join(desktop_dir, filename)
             
-            # Full path for the file
-            # Make sure we're not adding extra backslashes
-            desktop_dir = os.path.normpath(desktop_dir)
-            file_path = os.path.join(desktop_dir, filename)
+            # Ensure the directory path is properly formatted
+            file_path = os.path.normpath(file_path)
             
             # Create CSV file
             with open(file_path, 'w', newline='') as csvfile:
@@ -2387,10 +2399,13 @@ class VolunteerApp(MDApp):
                         earnings_fmt
                     ])
             
+            # Get the directory where the file was saved for display purposes
+            save_location = "Documents folder" if platform.system() == "Windows" else "Desktop"
+            
             # Show success message
             success_dialog = MDDialog(
                 title="Export Successful",
-                text=f"Report has been exported to your Desktop:\n{filename}",
+                text=f"Report has been exported to your {save_location}:\n{filename}",
                 buttons=[
                     MDRaisedButton(
                         text="OK", 
