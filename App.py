@@ -2307,7 +2307,8 @@ class VolunteerApp(MDApp):
             if hasattr(self, 'selected_employee_id') and self.selected_employee_id is not None:
                 # For a single employee report
                 employee_name = self.employee_spinner_btn.text.replace(" ", "_")
-                filename = f"{employee_name}'s_Report_{date_str}.csv"
+                # Remove apostrophes which can cause file system issues
+                filename = f"{employee_name}_Report_{date_str}.csv"
             elif hasattr(self, 'selected_role') and self.selected_role is not None:
                 # For a specific role report
                 role_name = self.selected_role.replace(" ", "_")
@@ -2317,6 +2318,8 @@ class VolunteerApp(MDApp):
                 filename = f"All_Employees_Report_{date_str}.csv"
             
             # Full path for the file
+            # Make sure we're not adding extra backslashes
+            desktop_dir = os.path.normpath(desktop_dir)
             file_path = os.path.join(desktop_dir, filename)
             
             # Create CSV file
