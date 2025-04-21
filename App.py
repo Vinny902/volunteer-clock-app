@@ -1471,8 +1471,8 @@ class VolunteerApp(MDApp):
                     status = "Currently active"
                     bg_color = [0.95, 1, 0.95, 1]  # Light green for active shifts
                 
-                # Use the same height for all entries
-                entry_height = dp(70)
+                # Increase entry height to accommodate longer names/roles
+                entry_height = dp(80)  # Increased from 70 to 80
                 
                 # Create entry card with fixed height
                 entry_box = BorderedBox(
@@ -1488,25 +1488,31 @@ class VolunteerApp(MDApp):
                 content_box = MDBoxLayout(
                     orientation="vertical",
                     size_hint_y=None,
-                    height=dp(70),  # Fixed height for content
+                    height=entry_height - dp(10),  # Account for padding
                     spacing=2
                 )
                 
-                # Row 1: Name and role
-                name_role_box = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(25))
+                # Row 1: Name and role - with text shorten properties
+                name_role_box = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(30))
                 name_label = MDLabel(
                     text=name,
                     theme_text_color="Custom",
                     text_color=[0, 0, 0, 1],
                     bold=True,
-                    size_hint_x=0.6
+                    size_hint_x=0.6,
+                    shorten=True,              # Enable text shortening
+                    shorten_from="right",      # Shorten from the right
+                    font_style="Subtitle1"
                 )
                 role_label = MDLabel(
                     text=role,
                     theme_text_color="Custom",
                     text_color=[0.5, 0.5, 0.5, 1],
                     size_hint_x=0.4,
-                    halign="right"
+                    halign="right",
+                    shorten=True,              # Enable text shortening
+                    shorten_from="left",       # Shorten from the left
+                    font_style="Caption"
                 )
                 name_role_box.add_widget(name_label)
                 name_role_box.add_widget(role_label)
@@ -1525,7 +1531,8 @@ class VolunteerApp(MDApp):
                     theme_text_color="Custom",
                     text_color=[0.3, 0.3, 0.3, 1],
                     size_hint_x=0.5,
-                    halign="right"
+                    halign="right",
+                    shorten=True              # Enable text shortening if needed
                 )
                 times_box.add_widget(clock_in_label)
                 times_box.add_widget(clock_out_label)
@@ -1537,7 +1544,8 @@ class VolunteerApp(MDApp):
                     text=status,
                     theme_text_color="Custom",
                     text_color=[0.4, 0.4, 0.8, 1] if clock_out else [0.2, 0.7, 0.2, 1],
-                    font_style="Caption"
+                    font_style="Caption",
+                    shorten=True              # Enable text shortening if needed
                 )
                 status_box.add_widget(status_label)
                 content_box.add_widget(status_box)
