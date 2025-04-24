@@ -995,10 +995,13 @@ class VolunteerApp(MDApp):
         self.show_employees()
 
     def add_employee_dialog(self, *args):
-        layout = MDBoxLayout(orientation='vertical', spacing=5, padding=dp(20), size_hint_y=None)
-        layout.height = self.root.height * 0.55  # Increased height to accommodate all fields
+        # Create a layout with fixed size rather than relative height
+        layout = MDBoxLayout(orientation='vertical', spacing=8, padding=dp(20), size_hint=(None, None))
+        layout.width = dp(400)  # Fixed width
+        layout.height = dp(480)  # Fixed height instead of relative
         
-        # First Name field
+        # First Name field in its own container
+        first_name_container = MDBoxLayout(orientation='vertical', size_hint_y=None, height=dp(70))
         first_name_label = MDLabel(
             text="First Name:*", 
             halign="left", 
@@ -1007,9 +1010,17 @@ class VolunteerApp(MDApp):
             size_hint_y=None, 
             height=dp(20)
         )
-        self.first_name_input = MDTextField(hint_text="First Name", mode="rectangle")
+        self.first_name_input = MDTextField(
+            hint_text="First Name", 
+            mode="rectangle",
+            size_hint_y=None,
+            height=dp(48)
+        )
+        first_name_container.add_widget(first_name_label)
+        first_name_container.add_widget(self.first_name_input)
         
-        # Last Name field
+        # Last Name field in its own container
+        last_name_container = MDBoxLayout(orientation='vertical', size_hint_y=None, height=dp(70))
         last_name_label = MDLabel(
             text="Last Name:*", 
             halign="left", 
@@ -1018,9 +1029,17 @@ class VolunteerApp(MDApp):
             size_hint_y=None, 
             height=dp(20)
         )
-        self.last_name_input = MDTextField(hint_text="Last Name", mode="rectangle")
+        self.last_name_input = MDTextField(
+            hint_text="Last Name", 
+            mode="rectangle",
+            size_hint_y=None,
+            height=dp(48)
+        )
+        last_name_container.add_widget(last_name_label)
+        last_name_container.add_widget(self.last_name_input)
         
-        # Price/hour field
+        # Price/hour field in its own container
+        price_container = MDBoxLayout(orientation='vertical', size_hint_y=None, height=dp(70))
         price_label = MDLabel(
             text="Price per hour ($):*", 
             halign="left", 
@@ -1029,9 +1048,18 @@ class VolunteerApp(MDApp):
             size_hint_y=None, 
             height=dp(20)
         )
-        self.price_input = MDTextField(hint_text="0.00", mode="rectangle", input_filter="float")
+        self.price_input = MDTextField(
+            hint_text="0.00", 
+            mode="rectangle", 
+            input_filter="float",
+            size_hint_y=None,
+            height=dp(48)
+        )
+        price_container.add_widget(price_label)
+        price_container.add_widget(self.price_input)
         
-        # Role section with existing roles dropdown
+        # Role section in its own container
+        role_container = MDBoxLayout(orientation='vertical', size_hint_y=None, height=dp(70))
         role_label = MDLabel(
             text="Role:*", 
             halign="left", 
@@ -1046,7 +1074,7 @@ class VolunteerApp(MDApp):
         role_dropdown_box = MDBoxLayout(
             orientation='vertical',
             size_hint_y=None,
-            height=dp(50),
+            height=dp(48),
             spacing=5
         )
         
@@ -1055,11 +1083,16 @@ class VolunteerApp(MDApp):
             on_release=self.open_role_menu,
             md_bg_color=[0.36, 0.65, 0.82, 1],  
             text_color=[1, 1, 1, 1],
-            size_hint_x=1
+            size_hint_x=1,
+            size_hint_y=None,
+            height=dp(48)
         )
         role_dropdown_box.add_widget(self.role_menu_button)
+        role_container.add_widget(role_label)
+        role_container.add_widget(role_dropdown_box)
         
-        # New role section
+        # New role section in its own container
+        new_role_container = MDBoxLayout(orientation='vertical', size_hint_y=None, height=dp(100))
         new_role_label = MDLabel(
             text="Or add a new role:", 
             halign="left", 
@@ -1072,14 +1105,16 @@ class VolunteerApp(MDApp):
         new_role_box = MDBoxLayout(
             orientation='horizontal',
             size_hint_y=None,
-            height=dp(50),
+            height=dp(48),
             spacing=10
         )
         
         self.new_role_input = MDTextField(
             hint_text="New Role Name",
             mode="rectangle",
-            size_hint_x=0.7
+            size_hint_x=0.7,
+            size_hint_y=None,
+            height=dp(48)
         )
         
         add_role_btn = MDRaisedButton(
@@ -1087,13 +1122,18 @@ class VolunteerApp(MDApp):
             on_release=lambda x: self.add_new_role_inline(),
             md_bg_color=[0.36, 0.65, 0.82, 1],  
             text_color=[1, 1, 1, 1],
-            size_hint_x=0.3
+            size_hint_x=0.3,
+            size_hint_y=None,
+            height=dp(48)
         )
         
         new_role_box.add_widget(self.new_role_input)
         new_role_box.add_widget(add_role_btn)
+        new_role_container.add_widget(new_role_label)
+        new_role_container.add_widget(new_role_box)
         
-        # Required fields note
+        # Required fields note in its own container
+        note_container = MDBoxLayout(orientation='vertical', size_hint_y=None, height=dp(30))
         required_note = MDLabel(
             text="* All fields are required", 
             halign="left", 
@@ -1103,26 +1143,23 @@ class VolunteerApp(MDApp):
             size_hint_y=None, 
             height=dp(20)
         )
+        note_container.add_widget(required_note)
         
-        # Add all fields to layout
-        layout.add_widget(first_name_label)
-        layout.add_widget(self.first_name_input)
-        layout.add_widget(last_name_label)
-        layout.add_widget(self.last_name_input)
-        layout.add_widget(price_label)
-        layout.add_widget(self.price_input)
-        layout.add_widget(role_label)
-        layout.add_widget(role_dropdown_box)
-        layout.add_widget(MDBoxLayout(size_hint_y=None, height=dp(5)))  # Small spacer
-        layout.add_widget(new_role_label)
-        layout.add_widget(new_role_box)
-        layout.add_widget(MDBoxLayout(size_hint_y=None, height=dp(10)))  # Spacer
-        layout.add_widget(required_note)
+        # Add all containers to main layout
+        layout.add_widget(first_name_container)
+        layout.add_widget(last_name_container)
+        layout.add_widget(price_container)
+        layout.add_widget(role_container)
+        layout.add_widget(new_role_container)
+        layout.add_widget(note_container)
         
+        # Create dialog with fixed size
         self.dialog = MDDialog(
             title="Add New Employee",
             type="custom",
             content_cls=layout,
+            size_hint=(None, None),
+            width=dp(450),
             buttons=[
                 MDRaisedButton(
                     text="Cancel", 
