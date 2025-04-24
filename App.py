@@ -1788,7 +1788,7 @@ class VolunteerApp(MDApp):
         emp_btn_spacer = MDBoxLayout(size_hint_y=None, height=dp(45))
         filter_box.add_widget(emp_btn_spacer)
         
-        # Button row
+        # Button row - UPDATED FOR PDF EXPORT
         button_row = MDBoxLayout(
             orientation="horizontal", 
             size_hint_y=None, 
@@ -1805,10 +1805,10 @@ class VolunteerApp(MDApp):
         )
         
         export_btn = MDRaisedButton(
-            text="Export to CSV",
+            text="Export to PDF",  # Changed from CSV to PDF
             md_bg_color=[0.83, 0.94, 0.96, 1],  # Lighter blue color
             text_color=[0, 0, 0, 1],  # Black text
-            on_release=lambda x: self.export_to_csv()
+            on_release=lambda x: self.export_to_pdf()  # Use new PDF function
         )
         
         button_row.add_widget(generate_btn)
@@ -2246,12 +2246,12 @@ class VolunteerApp(MDApp):
         )
         dialog.open()
         
-    def export_to_csv(self):
+    def export_to_pdf(self):
         # Get filter values
         from_date = self.date_from.text.strip()
         to_date = self.date_to.text.strip()
         
-        # Build query - now updated to include first_name and last_name
+        # Build query
         query = '''
             SELECT e.first_name, e.last_name, e.role, t.clock_in, t.clock_out, e.id, e.price_per_hour
             FROM timesheets t 
@@ -2297,142 +2297,234 @@ class VolunteerApp(MDApp):
         role_hours = {}
         role_earnings = {}
         
-        # Make sure to unpack the correct number of columns
+        processed_rows = []  # Will hold formatted data for the PDF
+        
         for first_name, last_name, role, clock_in, clock_out, employee_id, price_per_hour in rows:
             # Combine names for display
             name = f"{first_name} {last_name}".strip()
             
-            if clock_in and clock_out:
-                duration = datetime.fromisoformat(clock_out) - datetime.fromisoformat(clock_in)
-                hours = duration.total_seconds() / 3600
-                total_hours += hours
-                completed_shifts += 1
+            # Format times
+            if clock_in:
+                clock_in_fmt = datetime.fromisoformat(clock_in).strftime('%Y-%m-%d %H:%M')
+            else:
+                clock_in_fmt = ""
+            
+            if clock_out:
+                clock_out_fmt = datetime.fromisoformat(clock_out).strftime('%Y-%m-%d %H:%M')
+                # Calculate duration
+                duration = (datetime.fromisoformat(clock_out) - 
+                        datetime.fromisoformat(clock_in)).total_seconds() / 3600
+                duration_fmt = f"{duration:.2f}"
                 
                 # Calculate earnings for this shift
-                earnings = hours * price_per_hour
+                earnings = duration * price_per_hour
+                earnings_fmt = f"${earnings:.2f}"
+                
+                # Add to summary stats
+                total_hours += duration
+                completed_shifts += 1
                 total_earnings += earnings
                     
                 # By role
                 if role in role_hours:
-                    role_hours[role] += hours
+                    role_hours[role] += duration
                     role_earnings[role] = role_earnings.get(role, 0) + earnings
                 else:
-                    role_hours[role] = hours
+                    role_hours[role] = duration
                     role_earnings[role] = earnings
+            else:
+                clock_out_fmt = "Active"
+                duration_fmt = ""
+                earnings_fmt = ""
+            
+            # Add to processed rows
+            processed_rows.append([
+                name, 
+                role, 
+                clock_in_fmt, 
+                clock_out_fmt, 
+                duration_fmt, 
+                f"${price_per_hour:.2f}", 
+                earnings_fmt
+            ])
         
         try:
             import os
-            import csv
             import platform
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
             
             # Create simpler filename
             date_str = datetime.now().strftime("%Y%m%d")
             
-            # Create a more straightforward filename based on your criteria
+            # Create a more straightforward filename based on criteria
             if hasattr(self, 'selected_employee_id') and self.selected_employee_id is not None:
                 # For a single employee report
                 employee_name = self.employee_spinner_btn.text.replace(" ", "_")
-                # Remove any special characters that could cause issues
                 employee_name = ''.join(c for c in employee_name if c.isalnum() or c == '_')
-                filename = f"{employee_name}_Report_{date_str}.csv"
+                filename = f"{employee_name}_Report_{date_str}.pdf"
             elif hasattr(self, 'selected_role') and self.selected_role is not None:
                 # For a specific role report
                 role_name = self.selected_role.replace(" ", "_")
-                # Remove any special characters
                 role_name = ''.join(c for c in role_name if c.isalnum() or c == '_')
-                filename = f"{role_name}_Role_Report_{date_str}.csv"
+                filename = f"{role_name}_Role_Report_{date_str}.pdf"
             else:
                 # For all employees
-                filename = f"All_Employees_Report_{date_str}.csv"
-                
-            # Get appropriate path based on operating system
-            if platform.system() == "Windows":
-                # On Windows, use the Documents folder instead of Desktop to avoid permission issues
-                documents_dir = os.path.join(os.path.expanduser("~"), "Documents")
-                if not os.path.exists(documents_dir):
-                    # Fall back to the current directory if Documents doesn't exist
-                    documents_dir = os.getcwd()
-                file_path = os.path.join(documents_dir, filename)
-            else:
-                # On Mac/Linux, use the Desktop folder
-                desktop_dir = os.path.join(os.path.expanduser("~"), "Desktop")
-                file_path = os.path.join(desktop_dir, filename)
+                filename = f"All_Employees_Report_{date_str}.pdf"
             
-            # Ensure the directory path is properly formatted
+            # Get desktop path - we'll save to desktop on both Mac and Windows
+            desktop_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+            file_path = os.path.join(desktop_dir, filename)
             file_path = os.path.normpath(file_path)
             
-            # Create CSV file
-            with open(file_path, 'w', newline='') as csvfile:
-                writer = csv.writer(csvfile)
-                
-                # Write summary statistics first
-                writer.writerow(['Summary Statistics'])
-                writer.writerow(['Total Shifts', str(total_shifts)])
-                writer.writerow(['Completed Shifts', str(completed_shifts)])
-                writer.writerow(['Total Hours', f"{total_hours:.2f}"])
-                writer.writerow(['Total Earnings', f"${total_earnings:.2f}"])
-                
-                # Add hours and earnings by role
-                if role_hours:
-                    writer.writerow([''])
-                    writer.writerow(['Hours and Earnings by Role:'])
-                    for role in sorted(role_hours.keys()):
-                        writer.writerow([
-                            role, 
-                            f"{role_hours[role]:.2f}h", 
-                            f"${role_earnings.get(role, 0):.2f}"
-                        ])
-                
-                # Add a separator
-                writer.writerow([''])
-                writer.writerow([''])  # Extra blank line for separation
-                
-                # Write header for detailed data
-                writer.writerow(['Name', 'Role', 'Clock In', 'Clock Out', 'Duration (Hours)', 'Rate ($/hr)', 'Earnings ($)'])
-                
-                # Write data
-                for first_name, last_name, role, clock_in, clock_out, employee_id, price_per_hour in rows:
-                    # Combine names for display
-                    name = f"{first_name} {last_name}".strip()
-                    
-                    # Format times
-                    if clock_in:
-                        clock_in_fmt = datetime.fromisoformat(clock_in).strftime('%Y-%m-%d %H:%M:%S')
-                    else:
-                        clock_in_fmt = ""
-                    
-                    if clock_out:
-                        clock_out_fmt = datetime.fromisoformat(clock_out).strftime('%Y-%m-%d %H:%M:%S')
-                        # Calculate duration
-                        duration = (datetime.fromisoformat(clock_out) - 
-                                datetime.fromisoformat(clock_in)).total_seconds() / 3600
-                        duration_fmt = f"{duration:.2f}"
-                        
-                        # Calculate earnings for this shift
-                        earnings = duration * price_per_hour
-                        earnings_fmt = f"{earnings:.2f}"
-                    else:
-                        clock_out_fmt = ""
-                        duration_fmt = ""
-                        earnings_fmt = ""
-                    
-                    writer.writerow([
-                        name, 
-                        role, 
-                        clock_in_fmt, 
-                        clock_out_fmt, 
-                        duration_fmt, 
-                        f"{price_per_hour:.2f}", 
-                        earnings_fmt
-                    ])
+            # Create PDF document
+            doc = SimpleDocTemplate(
+                file_path,
+                pagesize=letter,
+                rightMargin=36,  # Reduced margins to have more space
+                leftMargin=36,
+                topMargin=36,
+                bottomMargin=36
+            )
             
-            # Get the directory where the file was saved for display purposes
-            save_location = "Documents folder" if platform.system() == "Windows" else "Desktop"
+            # Get styles
+            styles = getSampleStyleSheet()
+            title_style = styles['Heading1']
+            subtitle_style = styles['Heading2']
+            normal_style = styles['Normal']
+            
+            # Create content elements
+            elements = []
+            
+            # Title
+            if hasattr(self, 'selected_employee_id') and self.selected_employee_id is not None:
+                title = f"{self.employee_spinner_btn.text} Time Report"
+            elif hasattr(self, 'selected_role') and self.selected_role is not None:
+                title = f"{self.selected_role} Role Time Report"
+            else:
+                title = "All Employees Time Report"
+                
+            title_paragraph = Paragraph(title, title_style)
+            elements.append(title_paragraph)
+            elements.append(Spacer(1, 0.25*inch))
+            
+            # Date range
+            date_range = "Date Range: "
+            if from_date and to_date:
+                date_range += f"{from_date} to {to_date}"
+            elif from_date:
+                date_range += f"From {from_date}"
+            elif to_date:
+                date_range += f"Until {to_date}"
+            else:
+                date_range += "All dates"
+                
+            date_paragraph = Paragraph(date_range, normal_style)
+            elements.append(date_paragraph)
+            elements.append(Spacer(1, 0.25*inch))
+            
+            # Summary statistics section
+            elements.append(Paragraph("Summary Statistics", subtitle_style))
+            elements.append(Spacer(1, 0.1*inch))
+            
+            summary_data = [
+                ["Total Shifts", str(total_shifts)],
+                ["Completed Shifts", str(completed_shifts)],
+                ["Total Hours", f"{total_hours:.2f}"],
+                ["Total Earnings", f"${total_earnings:.2f}"]
+            ]
+            
+            summary_table = Table(summary_data, colWidths=[2*inch, 1.5*inch])
+            summary_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
+                ('TEXTCOLOR', (0, 0), (0, -1), colors.black),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            elements.append(summary_table)
+            elements.append(Spacer(1, 0.2*inch))
+            
+            # Hours by role section
+            if role_hours:
+                elements.append(Paragraph("Hours and Earnings by Role", subtitle_style))
+                elements.append(Spacer(1, 0.1*inch))
+                
+                role_data = [["Role", "Hours", "Earnings"]]
+                for role in sorted(role_hours.keys()):
+                    role_data.append([
+                        role, 
+                        f"{role_hours[role]:.2f}", 
+                        f"${role_earnings.get(role, 0):.2f}"
+                    ])
+                
+                role_table = Table(role_data, colWidths=[3*inch, 1*inch, 1*inch])
+                role_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+                    ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                    ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+                    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ]))
+                elements.append(role_table)
+                elements.append(Spacer(1, 0.2*inch))
+            
+            # Detailed records section
+            elements.append(Paragraph("Detailed Time Records", subtitle_style))
+            elements.append(Spacer(1, 0.1*inch))
+            
+            # Add headers to processed rows
+            detailed_data = [["Name", "Role", "Clock In", "Clock Out", "Duration (Hrs)", "Rate", "Earnings"]]
+            detailed_data.extend(processed_rows)
+            
+            # Calculate column widths based on the data - IMPROVED SPACING
+            # Wider columns for Clock In and Clock Out to prevent overlap
+            col_widths = [
+                1.3*inch,  # Name
+                1.0*inch,  # Role
+                1.5*inch,  # Clock In - increased width
+                1.5*inch,  # Clock Out - increased width
+                0.8*inch,  # Duration
+                0.7*inch,  # Rate
+                0.8*inch   # Earnings
+            ]
+            
+            detailed_table = Table(detailed_data, colWidths=col_widths)
+            detailed_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+                ('ALIGN', (0, 0), (1, -1), 'LEFT'),        # Left align Name and Role
+                ('ALIGN', (2, 0), (3, -1), 'CENTER'),      # Center align Clock In and Clock Out
+                ('ALIGN', (4, 0), (-1, -1), 'RIGHT'),      # Right align Duration, Rate, Earnings
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),         # Slightly smaller font to fit better
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            elements.append(detailed_table)
+            
+            # Add footer with generation timestamp
+            elements.append(Spacer(1, 0.3*inch))
+            footer_text = f"Report generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            footer = Paragraph(footer_text, normal_style)
+            elements.append(footer)
+            
+            # Build PDF
+            doc.build(elements)
             
             # Show success message
             success_dialog = MDDialog(
                 title="Export Successful",
-                text=f"Report has been exported to your {save_location}:\n{filename}",
+                text=f"Report has been exported to your Desktop:\n{filename}",
                 buttons=[
                     MDRaisedButton(
                         text="OK", 
