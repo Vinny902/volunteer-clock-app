@@ -1569,22 +1569,41 @@ class VolunteerApp(MDApp):
     def show_reports(self):
         content = MDBoxLayout(orientation='vertical', spacing=10, padding=10)
         
-        # Title
+        # Create a separate header box for the title with fixed positioning
+        header_box = MDBoxLayout(
+            orientation='horizontal',
+            size_hint_y=None,
+            height=dp(40),
+            padding=[0, 0, 0, 0]
+        )
+        
+        # Title - now positioned at the left
         title_label = MDLabel(
             text="Time Reports",
             font_style="H5",
             theme_text_color="Custom",
             text_color=[0.2, 0.2, 0.2, 1],
-            size_hint_y=None,
-            height=dp(40)
+            size_hint_x=None,
+            width=dp(200)  # Fixed width to prevent overlap
         )
-        content.add_widget(title_label)
+        
+        # Add spacer to push everything to the left
+        spacer = MDBoxLayout()
+        
+        header_box.add_widget(title_label)
+        header_box.add_widget(spacer)
+        
+        content.add_widget(header_box)
+        
+        # Add a small spacer between title and filter section
+        title_spacer = MDBoxLayout(size_hint_y=None, height=dp(10))
+        content.add_widget(title_spacer)
         
         # Create filter section
         filter_box = BorderedBox(
             orientation="vertical",
             size_hint_y=None,
-            height=dp(350),  # Increased height for added spacing
+            height=dp(350),
             bg_color=[0.97, 0.97, 0.97, 1],
             padding=[20, 20, 20, 20],
             spacing=10
@@ -1602,7 +1621,7 @@ class VolunteerApp(MDApp):
         )
         filter_box.add_widget(filter_title)
         
-        # Add spacer to create distance between title and form fields (2-3 lines)
+        # Add spacer to create distance between title and form fields
         title_spacer = MDBoxLayout(size_hint_y=None, height=dp(30))
         filter_box.add_widget(title_spacer)
         
